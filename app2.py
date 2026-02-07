@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 # Gemini 2.0 Flash Setup (AI Remedy Generator)
 # ==============================================================================
 
-API_KEY = "AIzaSyCWwrYrzl6gr93CWcjbLTb2FRBAoHe1-pM"  # Rotate your exposed key immediately
+API_KEY = "API_KEY"  # Rotate your exposed key immediately
 genai.configure(api_key=API_KEY)
 
 MODEL_NAME = "gemini-2.5-flash"
