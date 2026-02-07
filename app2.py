@@ -12,6 +12,92 @@ from sklearn.preprocessing import StandardScaler
 import plotly.express as px
 from scapy.all import sniff, IP, TCP, UDP, Raw, get_if_list
 from scapy.layers.inet import ICMP
+import google.generativeai as genai
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+
+
+# ==============================================================================
+# Gemini 2.0 Flash Setup (AI Remedy Generator)
+# ==============================================================================
+
+API_KEY = "AIzaSyBmH7gjL0brMI6V8OzxIJ3ljBLsbVprFHs"  # Rotate your exposed key immediately
+genai.configure(api_key=API_KEY)
+
+MODEL_NAME = "gemini-2.5-flash"
+
+class GeminiAttackExplainer:
+
+    def generate_simple_explanation(self, attack_list):
+        prompt = f"""
+You are a cybersecurity expert.
+
+Explain the following cyber attacks in VERY SIMPLE language so that a common person can understand.
+
+Attacks detected:
+{', '.join(attack_list)}
+
+For EACH attack give:
+
+1. What is this attack? (Simple explanation)
+2. Real world example (Easy example)
+3. How to prevent it? (Simple prevention steps)
+
+Keep it SHORT.
+Keep it EASY.
+Do not use technical jargon.
+Format clearly.
+"""
+
+        model = genai.GenerativeModel(MODEL_NAME)
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": 10000
+            }
+        )
+
+        return response.text if response else "No response generated."
+    def generate_content(self, user_query):
+        model = genai.GenerativeModel(MODEL_NAME)
+
+        system_prompt = """
+You are a professional AI assistant inside a Network Anomaly Detection Dashboard.
+
+Your role:
+- Answer clearly and correctly.
+- If user asks about cyber attacks, explain in simple language.
+- If user asks technical questions, give structured and accurate answers.
+- If user question is unclear, politely ask for clarification.
+- Keep answers short and understandable.
+- Do NOT say you are an AI model.
+- Do NOT return empty responses.
+"""
+
+        full_prompt = f"{system_prompt}\n\nUser Query:\n{user_query}"
+
+        response = model.generate_content(
+            full_prompt,
+            generation_config={
+                "temperature": 0.5,
+                "max_output_tokens": 3000
+            }
+        )
+        return response
+
+gemini_service = GeminiAttackExplainer()
+def send_defender_message():
+    msg = st.session_state.get("defender_input", "").strip()
+    if msg:
+        st.session_state.defender_history.append(("You", msg))
+        reply = gemini_service.generate_content(msg)
+        st.session_state.defender_history.append(
+            ("Defender X", reply.text if hasattr(reply, "text") else str(reply))
+        )
+        st.session_state.defender_input = ""
+
 
 # ==============================================================================
 # Step 1: Initialize Global Variables / Session State
@@ -187,49 +273,139 @@ def process_and_queue_packet(data_queue, stop_event):
 # ==============================================================================
 # Step 4: Enhanced Prediction Logic
 # ==============================================================================
+# def make_prediction(packet_buffer, log_entry, detection_mode):
+#     predicted_class_name = "Benign"
+#     confidence = 0.0
+    
+#     if detection_mode == "Benign Mode":
+#         predicted_class_name = "Benign"
+#         confidence = 0.99
+#         return predicted_class_name, confidence
+
+#     # Anomaly Detection Logic
+#     is_known_malicious = log_entry['source_ip'] in st.session_state.malicious_ips
+    
+#     if use_model and len(packet_buffer) == time_steps:
+#         df = pd.DataFrame(list(packet_buffer), columns=features)
+#         # scaled_features = scaler.transform(df)
+#         if use_model and hasattr(scaler, "feature_names_in_"):
+#             expected_features = list(scaler.feature_names_in_)
+#             for col in expected_features:
+#                 if col not in df.columns:
+#                     df[col] = 0
+#             df = df[expected_features]
+#         scaled_features = scaler.transform(df)
+#         df = df[expected_features]
+#         input_data = np.array(scaled_features).astype(np.float32).reshape(1, time_steps, -1)
+#         interpreter.set_tensor(input_details[0]['index'], input_data)
+#         interpreter.invoke()
+#         output_data = interpreter.get_tensor(output_details[0]['index'])
+#         predicted_class_index = int(np.argmax(output_data))
+#         confidence = float(np.max(output_data))
+#         if hasattr(encoder, "classes_"):
+#             num_classes = len(encoder.classes_)
+#             if predicted_class_index < num_classes:
+#                 predicted_class_name = encoder.inverse_transform([predicted_class_index])[0]
+#             else:
+#                 predicted_class_name = "Benign"
+#         else:
+#             predicted_class_name = "Benign"
+#         predicted_class_name = encoder.inverse_transform([predicted_class_index])[0]
+#         confidence = np.max(output_data)
+#     else:
+#         packet_type = log_entry.get('packet_type', 'normal')
+        
+#         if is_known_malicious:
+#             predicted_class_name = random.choices([t for t in attack_types if t != "Benign"], 
+#                                                 weights=[2, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1])[0]
+#             confidence = round(random.uniform(0.75, 0.95), 2)
+#         elif packet_type == "malicious":
+#             predicted_class_name = random.choices(attack_types, 
+#                                                 weights=[0.1] + [0.9/15]*15)[0]
+#             confidence = round(random.uniform(0.65, 0.90), 2)
+#         elif packet_type == "suspicious":
+#             predicted_class_name = random.choices(attack_types, 
+#                                                 weights=[0.4] + [0.6/15]*15)[0]
+#             confidence = round(random.uniform(0.55, 0.80), 2)
+#         else:
+#             predicted_class_name = random.choices(attack_types, 
+#                                                 weights=[0.7] + [0.3/15]*15)[0]
+#             confidence = round(random.uniform(0.50, 0.75), 2)
+    
+#     return predicted_class_name, confidence
+
 def make_prediction(packet_buffer, log_entry, detection_mode):
     predicted_class_name = "Benign"
     confidence = 0.0
-    
-    if detection_mode == "Benign Mode":
-        predicted_class_name = "Benign"
-        confidence = 0.99
-        return predicted_class_name, confidence
 
-    # Anomaly Detection Logic
+    if detection_mode == "Benign Mode":
+        return "Benign", 0.99
+
     is_known_malicious = log_entry['source_ip'] in st.session_state.malicious_ips
-    
+
     if use_model and len(packet_buffer) == time_steps:
-        df = pd.DataFrame(list(packet_buffer), columns=features)
-        scaled_features = scaler.transform(df)
-        input_data = np.array(scaled_features).astype(np.float32).reshape(1, time_steps, -1)
-        interpreter.set_tensor(input_details[0]['index'], input_data)
-        interpreter.invoke()
-        output_data = interpreter.get_tensor(output_details[0]['index'])
-        predicted_class_index = np.argmax(output_data)
-        predicted_class_name = encoder.inverse_transform([predicted_class_index])[0]
-        confidence = np.max(output_data)
+        try:
+            df = pd.DataFrame(list(packet_buffer), columns=features)
+
+            # ---------------- FIX 1: Feature Schema Alignment ----------------
+            if hasattr(scaler, "feature_names_in_"):
+                expected_features = list(scaler.feature_names_in_)
+
+                for col in expected_features:
+                    if col not in df.columns:
+                        df[col] = 0
+
+                df = df[expected_features]
+            # ------------------------------------------------------------------
+
+            scaled_features = scaler.transform(df)
+
+            input_data = np.array(scaled_features).astype(np.float32).reshape(1, time_steps, -1)
+
+            interpreter.set_tensor(input_details[0]['index'], input_data)
+            interpreter.invoke()
+
+            output_data = interpreter.get_tensor(output_details[0]['index'])
+            output_vector = output_data.flatten()
+
+            # ---------------- FIX 2: Safe Output Handling ----------------
+            predicted_class_index = int(np.argmax(output_vector))
+            confidence = float(np.max(output_vector))
+
+            if predicted_class_index < len(attack_types):
+                predicted_class_name = attack_types[predicted_class_index]
+            else:
+                predicted_class_name = "Benign"
+            # ------------------------------------------------------------------
+
+        except Exception as e:
+            print("Model prediction error:", e)
+            predicted_class_name = "Benign"
+            confidence = 0.0
+
     else:
+        # ---------------- Simulation Fallback Logic ----------------
         packet_type = log_entry.get('packet_type', 'normal')
-        
+
         if is_known_malicious:
-            predicted_class_name = random.choices([t for t in attack_types if t != "Benign"], 
-                                                weights=[2, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1])[0]
+            predicted_class_name = random.choice([t for t in attack_types if t != "Benign"])
             confidence = round(random.uniform(0.75, 0.95), 2)
+
         elif packet_type == "malicious":
-            predicted_class_name = random.choices(attack_types, 
-                                                weights=[0.1] + [0.9/15]*15)[0]
+            predicted_class_name = random.choice(attack_types[1:])
             confidence = round(random.uniform(0.65, 0.90), 2)
+
         elif packet_type == "suspicious":
-            predicted_class_name = random.choices(attack_types, 
-                                                weights=[0.4] + [0.6/15]*15)[0]
+            predicted_class_name = random.choice(attack_types)
             confidence = round(random.uniform(0.55, 0.80), 2)
+
         else:
-            predicted_class_name = random.choices(attack_types, 
-                                                weights=[0.7] + [0.3/15]*15)[0]
+            predicted_class_name = random.choice(attack_types)
             confidence = round(random.uniform(0.50, 0.75), 2)
-    
+        # ------------------------------------------------------------
+
     return predicted_class_name, confidence
+
 
 # ==============================================================================
 # Step 5: Streamlit UI Layout & Main Thread Logic
@@ -455,32 +631,24 @@ if st.session_state.packets_data:
 
     # ================= Attack Details Tab =================
     with tabs[2]:
-        st.header("📚 Attack Details and Prevention")
-        attack_info = {
-            "Benign": {"description":"Normal, legitimate network traffic","cause":"Standard user activities and system operations","prevention":"None required - this is normal traffic"},
-            "DoS": {"description":"Denial of Service - floods a network with malicious packets, overwhelming the system.","cause":"Excessive service requests from a single source to consume resources.","prevention":"Rate limiting, firewalls, load balancers, and IDS monitoring."},
-            "DDoS": {"description":"Distributed Denial of Service - coordinated attack from multiple sources.","cause":"Botnet-controlled devices attacking simultaneously.","prevention":"Content Delivery Networks (CDNs), traffic filtering, and DDoS protection services."},
-            "Spoofing": {"description":"An attacker impersonates a trusted entity by forging network identifiers.","cause":"Modified packet headers, fake source IPs, or MAC address manipulation.","prevention":"Ingress/egress filtering, strong authentication protocols, and network access control."},
-            "MITM": {"description":"Man-in-the-Middle - attacker secretly intercepts and relays communication.","cause":"Weak encryption, compromised network infrastructure, or ARP poisoning.","prevention":"End-to-end encryption (TLS/SSL), VPNs, certificate pinning, and secure key exchange."},
-            "Brute Force": {"description":"Systematic attempts to guess passwords, keys, or access credentials.","cause":"Weak authentication mechanisms and easily guessable passwords.","prevention":"Multi-Factor Authentication (MFA), account lockout policies, CAPTCHAs, and strong password requirements."},
-            "SQL Injection": {"description":"Malicious SQL code injection to manipulate database queries.","cause":"Improper input validation and lack of parameterized queries in web applications.","prevention":"Prepared statements, input sanitization, least privilege database accounts, and code reviews."},
-            "XSS": {"description":"Cross-Site Scripting - injecting malicious scripts into web pages.","cause":"Improper input validation allowing script execution in browsers.","prevention":"Input validation, output encoding, Content Security Policy (CSP), and secure coding practices."},
-            "Phishing": {"description":"Social engineering to steal sensitive information through deception.","cause":"Fraudulent emails, websites, or messages mimicking legitimate entities.","prevention":"User awareness training, email filtering, multi-factor authentication, and security awareness."},
-            "Ransomware": {"description":"Malicious software that encrypts files and demands ransom payment.","cause":"Malware infection through email attachments, downloads, or system vulnerabilities.","prevention":"Regular backups, endpoint protection, patch management, and user education."},
-            "Botnet": {"description":"Network of compromised devices under remote attacker control.","cause":"Malware infection allowing unauthorized remote access and control.","prevention":"Antivirus software, firewalls, network monitoring, and regular system updates."},
-            "Worm": {"description":"Self-replicating malware that spreads across networks automatically.","cause":"Exploitation of unpatched software vulnerabilities for autonomous spreading.","prevention":"Regular security updates, network segmentation, Intrusion Detection Systems, and endpoint protection."},
-            "Trojan": {"description":"Malicious software disguised as legitimate applications.","cause":"Users unknowingly installing malware disguised as useful software.","prevention":"Antivirus software, application whitelisting, downloading from trusted sources only."},
-            "Port Scanning": {"description":"Network reconnaissance to identify open ports and potential vulnerabilities.","cause":"Automated tools probing network services for security assessment or attack preparation.","prevention":"Firewall configuration, intrusion detection, port knocking, and network segmentation."},
-            "ARP Spoofing": {"description":"Address Resolution Protocol manipulation to intercept network traffic.","cause":"Sending false ARP messages to associate attacker's MAC with victim's IP address.","prevention":"Static ARP entries, dynamic ARP inspection, network monitoring, and switch security features."},
-            "DNS Spoofing": {"description":"Domain Name System manipulation to redirect traffic to malicious servers.","cause":"DNS cache poisoning or compromised DNS servers providing false resolution.","prevention":"DNSSEC implementation, secure DNS resolvers, DNS over HTTPS/TLS, and network monitoring."}
-        }
-        
-        selected_attack = st.selectbox("🔍 Select Attack Type for Details", list(attack_info.keys()))
-        info = attack_info.get(selected_attack)
-        if info:
-            st.markdown(f"**📝 Description:** {info['description']}")
-            st.markdown(f"**🔍 Root Cause:** {info['cause']}")
-            st.markdown(f"**🛡️ Prevention Methods:** {info['prevention']}")
+        st.header("📚 AI-Based Attack Remediation")
+        if st.session_state.packets_data:
+            df = pd.DataFrame(st.session_state.packets_data)
+            detected_attacks = df[df['prediction'] != "Benign"]['prediction'].unique().tolist()
+            if detected_attacks:
+                st.subheader("🚨 Detected Attacks")
+                st.write(", ".join(detected_attacks))
+                if st.button("🤖 Explain All Detected Attacks (Simple)"):
+                    with st.spinner("Generating simple explanations..."):
+                        explanation = gemini_service.generate_simple_explanation(detected_attacks)
+                        st.success("✅ Explanation Generated")
+                        st.markdown(explanation)
+            else:
+                st.info("No malicious attacks detected yet.")
+        else:
+            st.info("Start the simulation to detect attacks.")
+
+
 
     # ================= Severity & IP Heatmap Tab =================
     with tabs[3]:
@@ -570,6 +738,103 @@ if st.session_state.packets_data:
             st.info("No threat sources identified yet.")
 else:
     st.info("👆 Start the selected mode to begin collecting and analyzing network traffic data.")
+
+# ================= CLEAN FLOATING RIGHT CHATBOT ================= #
+
+# ================= DEFENDER X CHAT (SIDEBAR) ================= #
+
+if "defender_open" not in st.session_state:
+    st.session_state.defender_open = True   # sidebar chat visible by default
+
+if "defender_history" not in st.session_state:
+    st.session_state.defender_history = [
+        ("Defender X", "Hello! I’m Defender X 🛡️. How can I help you with network security today?")
+    ]
+
+# ---------- HEADER WITH ICON + CLOSE BUTTON ----------
+header_col1, header_col2 = st.sidebar.columns([6,1])
+
+with header_col1:
+    icon_col, title_col = st.sidebar.columns([1, 5])
+
+    with icon_col:
+        st.image("assets/defender_x.png", width=36)
+
+    with title_col:
+        if st.button("Defender X", key="defender_open_title"):
+            st.session_state.defender_open = True
+            st.rerun()
+
+
+with header_col2:
+    if st.button("❌", key="defender_close_btn"):
+        st.session_state.defender_open = False
+        st.rerun()
+
+# ---------- CHAT BODY ----------
+if st.session_state.defender_open:
+    chat_container = st.sidebar.container()
+
+    with chat_container:
+        for sender, msg in st.session_state.defender_history:
+            if sender == "You":
+                st.markdown(
+                    f"""
+                    <div style="
+                        text-align:right;
+                        background:#2563eb;
+                        color:white;
+                        padding:10px;
+                        border-radius:12px;
+                        margin-bottom:8px;">
+                        {msg}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background:#111827;
+                        color:white;
+                        padding:10px;
+                        border-radius:12px;
+                        margin-bottom:8px;">
+                        <b>{sender}:</b><br>{msg}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+    # ---------- INPUT ----------
+    st.sidebar.text_input(
+    "Ask Defender X",
+    key="defender_input",
+    placeholder="Ask about attacks, DDoS, IPs, logs...",
+    on_change=send_defender_message
+)
+
+
+    send_col1, send_col2 = st.sidebar.columns([3,2])
+
+    with send_col1:
+        if st.button("Send"):
+            if user_input.strip():
+                st.session_state.defender_history.append(("You", user_input))
+                reply = gemini_service.generate_content(user_input)
+                st.session_state.defender_history.append(
+                    ("Defender X", reply.text if hasattr(reply,"text") else str(reply))
+                )
+                st.rerun()
+
+    # ---------- CLEAR CHAT BUTTON ----------
+    with send_col2:
+        if st.button("🧹 Clear Chat"):
+            st.session_state.defender_history = [
+                ("Defender X", "Chat cleared. How can I help you now?")
+            ]
+            st.rerun()
 
 # Footer
 st.markdown("---")
