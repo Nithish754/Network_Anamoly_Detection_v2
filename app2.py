@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 # Gemini 2.0 Flash Setup (AI Remedy Generator)
 # ==============================================================================
 
-API_KEY = "API_KEY"  # Rotate your exposed key immediately
+API_KEY = "AIzaSyBmH7gjL0brMI6V8OzxIJ3ljBLsbVprFHs"  # Rotate your exposed key immediately
 genai.configure(api_key=API_KEY)
 
 MODEL_NAME = "gemini-2.5-flash"
@@ -88,6 +88,16 @@ Your role:
         return response
 
 gemini_service = GeminiAttackExplainer()
+def send_defender_message():
+    msg = st.session_state.get("defender_input", "").strip()
+    if msg:
+        st.session_state.defender_history.append(("You", msg))
+        reply = gemini_service.generate_content(msg)
+        st.session_state.defender_history.append(
+            ("Defender X", reply.text if hasattr(reply, "text") else str(reply))
+        )
+        st.session_state.defender_input = ""
+
 
 # ==============================================================================
 # Step 1: Initialize Global Variables / Session State
@@ -731,249 +741,100 @@ else:
 
 # ================= CLEAN FLOATING RIGHT CHATBOT ================= #
 
-# ================= CLEAN FLOATING RIGHT CHATBOT ================= #
+# ================= DEFENDER X CHAT (SIDEBAR) ================= #
 
-if "floating_chat_history" not in st.session_state:
-    st.session_state.floating_chat_history = []
-if "chat_open" not in st.session_state:
-    st.session_state.chat_open = False
+if "defender_open" not in st.session_state:
+    st.session_state.defender_open = True   # sidebar chat visible by default
 
-def send_floating_message():
-    if st.session_state.floating_input.strip() != "":
-        query = st.session_state.floating_input
-        reply = gemini_service.generate_content(query)
+if "defender_history" not in st.session_state:
+    st.session_state.defender_history = [
+        ("Defender X", "Hello! I’m Defender X 🛡️. How can I help you with network security today?")
+    ]
 
-        st.session_state.floating_chat_history.append(("You", query))
-        st.session_state.floating_chat_history.append(("Bot", reply.text if hasattr(reply, 'text') else str(reply)))
-        st.session_state.floating_input = ""
+# ---------- HEADER WITH ICON + CLOSE BUTTON ----------
+header_col1, header_col2 = st.sidebar.columns([6,1])
 
-# Build chat history HTML
-chat_html = ""
-for sender, message in st.session_state.floating_chat_history:
-    if sender == "You":
-        chat_html += f"<div class='user-msg'>🧑 <strong>You:</strong> {message}</div>"
-    else:
-        chat_html += f"<div class='bot-msg'>🤖 <strong>Assistant:</strong> {message}</div>"
+with header_col1:
+    icon_col, title_col = st.sidebar.columns([1, 5])
 
-# Chat display state - initially hidden
-chat_display = "flex" if st.session_state.chat_open else "none"
+    with icon_col:
+        st.image("assets/defender_x.png", width=36)
 
-# Inject FULL floating UI with toggle functionality
-st.markdown(f"""
-<style>
-#chat-toggle {{
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 65px;
-    height: 65px;
-    background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
-    border-radius: 50%;
-    text-align: center;
-    font-size: 28px;
-    color: white;
-    line-height: 65px;
-    cursor: pointer;
-    z-index: 9999;
-    box-shadow: 0px 4px 16px rgba(0,0,0,0.4);
-    transition: all 0.3s ease;
-}}
+    with title_col:
+        if st.button("Defender X", key="defender_open_title"):
+            st.session_state.defender_open = True
+            st.rerun()
 
-#chat-toggle:hover {{
-    transform: scale(1.1);
-    box-shadow: 0px 6px 20px rgba(0,0,0,0.5);
-}}
 
-#chat-container {{
-    display: {chat_display};
-    position: fixed;
-    bottom: 100px;
-    right: 20px;
-    width: 420px;
-    height: 580px;
-    background: white;
-    border-radius: 20px;
-    box-shadow: 0px 8px 30px rgba(0,0,0,0.35);
-    z-index: 9998;
-    overflow: hidden;
-    flex-direction: column;
-    animation: slideIn 0.3s ease-out;
-}}
+with header_col2:
+    if st.button("❌", key="defender_close_btn"):
+        st.session_state.defender_open = False
+        st.rerun()
 
-@keyframes slideIn {{
-    from {{
-        transform: translateY(100%);
-        opacity: 0;
-    }}
-    to {{
-        transform: translateY(0);
-        opacity: 1;
-    }}
-}}
+# ---------- CHAT BODY ----------
+if st.session_state.defender_open:
+    chat_container = st.sidebar.container()
 
-#chat-header {{
-    background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
-    color: white;
-    padding: 18px 20px;
-    font-weight: bold;
-    font-size: 16px;
-    border-radius: 20px 20px 0 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}}
+    with chat_container:
+        for sender, msg in st.session_state.defender_history:
+            if sender == "You":
+                st.markdown(
+                    f"""
+                    <div style="
+                        text-align:right;
+                        background:#2563eb;
+                        color:white;
+                        padding:10px;
+                        border-radius:12px;
+                        margin-bottom:8px;">
+                        {msg}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background:#111827;
+                        color:white;
+                        padding:10px;
+                        border-radius:12px;
+                        margin-bottom:8px;">
+                        <b>{sender}:</b><br>{msg}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-#chat-close {{
-    cursor: pointer;
-    font-size: 24px;
-    font-weight: bold;
-    color: white;
-    background: rgba(255,255,255,0.2);
-    border-radius: 50%;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}}
-
-#chat-close:hover {{
-    background: rgba(255,255,255,0.3);
-    transform: rotate(90deg);
-}}
-
-#chat-messages {{
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    background: #f8fafc;
-}}
-
-#chat-input-area {{
-    padding: 15px 20px;
-    background: white;
-    border-top: 1px solid #e2e8f0;
-    border-radius: 0 0 20px 20px;
-}}
-
-.user-msg {{
-    background: linear-gradient(135deg, #bae6fd 0%, #7dd3fc 100%);
-    padding: 12px 15px;
-    border-radius: 15px 15px 5px 15px;
-    margin-bottom: 12px;
-    max-width: 85%;
-    margin-left: auto;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    word-wrap: break-word;
-}}
-
-.bot-msg {{
-    background: white;
-    padding: 12px 15px;
-    border-radius: 15px 15px 15px 5px;
-    margin-bottom: 12px;
-    max-width: 85%;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    border-left: 3px solid #38bdf8;
-    word-wrap: break-word;
-}}
-
-.user-msg strong, .bot-msg strong {{
-    display: block;
-    margin-bottom: 5px;
-    font-size: 13px;
-    opacity: 0.8;
-}}
-
-#chat-messages::-webkit-scrollbar {{
-    width: 6px;
-}}
-
-#chat-messages::-webkit-scrollbar-track {{
-    background: #f1f1f1;
-}}
-
-#chat-messages::-webkit-scrollbar-thumb {{
-    background: #38bdf8;
-    border-radius: 3px;
-}}
-
-.chat-input-wrapper {{
-    display: flex;
-    gap: 10px;
-    align-items: center;
-}}
-
-.chat-input-wrapper input {{
-    flex: 1;
-    padding: 10px 15px;
-    border: 2px solid #e2e8f0;
-    border-radius: 25px;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.3s;
-}}
-
-.chat-input-wrapper input:focus {{
-    border-color: #38bdf8;
-}}
-</style>
-
-<div id="chat-toggle" onclick="toggleChatStreamlit()">💬</div>
-
-<div id="chat-container">
-    <div id="chat-header">
-        <span>🤖 Security Assistant</span>
-        <div id="chat-close" onclick="toggleChatStreamlit()">×</div>
-    </div>
-    <div id="chat-messages">
-        {chat_html if chat_html else "<div style='text-align:center; color:#64748b; margin-top:50px;'>👋 Hello! How can I help you today?</div>"}
-    </div>
-    <div id="chat-input-area">
-        <div class="chat-input-wrapper">
-            <input type="text" id="chat-input-box" placeholder="Type your message..." readonly />
-        </div>
-    </div>
-</div>
-
-<script>
-const stApp = window.parent.document;
-
-function toggleChatStreamlit() {{
-    // Find the hidden button in Streamlit
-    const buttons = stApp.querySelectorAll('button');
-    buttons.forEach(btn => {{
-        if (btn.textContent.includes('Toggle Chat')) {{
-            btn.click();
-        }}
-    }});
-}}
-</script>
-""", unsafe_allow_html=True)
-
-# Hidden button to toggle chat state
-if st.button("Toggle Chat", key="toggle_chat_btn", type="primary"):
-    st.session_state.chat_open = not st.session_state.chat_open
-    st.rerun()
-
-# Hide the toggle button with CSS
-st.markdown("""
-<style>
-button[kind="primary"] {
-    display: none !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Hidden Streamlit input for message handling
-st.text_input(
-    "Chat Input",
-    key="floating_input",
-    on_change=send_floating_message,
-    label_visibility="collapsed",
-    placeholder="This is hidden - use the chat window above"
+    # ---------- INPUT ----------
+    st.sidebar.text_input(
+    "Ask Defender X",
+    key="defender_input",
+    placeholder="Ask about attacks, DDoS, IPs, logs...",
+    on_change=send_defender_message
 )
+
+
+    send_col1, send_col2 = st.sidebar.columns([3,2])
+
+    with send_col1:
+        if st.button("Send"):
+            if user_input.strip():
+                st.session_state.defender_history.append(("You", user_input))
+                reply = gemini_service.generate_content(user_input)
+                st.session_state.defender_history.append(
+                    ("Defender X", reply.text if hasattr(reply,"text") else str(reply))
+                )
+                st.rerun()
+
+    # ---------- CLEAR CHAT BUTTON ----------
+    with send_col2:
+        if st.button("🧹 Clear Chat"):
+            st.session_state.defender_history = [
+                ("Defender X", "Chat cleared. How can I help you now?")
+            ]
+            st.rerun()
 
 # Footer
 st.markdown("---")
