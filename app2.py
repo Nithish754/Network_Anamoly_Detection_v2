@@ -12,6 +12,82 @@ from sklearn.preprocessing import StandardScaler
 import plotly.express as px
 from scapy.all import sniff, IP, TCP, UDP, Raw, get_if_list
 from scapy.layers.inet import ICMP
+import google.generativeai as genai
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+
+
+# ==============================================================================
+# Gemini 2.0 Flash Setup (AI Remedy Generator)
+# ==============================================================================
+
+API_KEY = "AIzaSyCWwrYrzl6gr93CWcjbLTb2FRBAoHe1-pM"  # Rotate your exposed key immediately
+genai.configure(api_key=API_KEY)
+
+MODEL_NAME = "gemini-2.5-flash"
+
+class GeminiAttackExplainer:
+
+    def generate_simple_explanation(self, attack_list):
+        prompt = f"""
+You are a cybersecurity expert.
+
+Explain the following cyber attacks in VERY SIMPLE language so that a common person can understand.
+
+Attacks detected:
+{', '.join(attack_list)}
+
+For EACH attack give:
+
+1. What is this attack? (Simple explanation)
+2. Real world example (Easy example)
+3. How to prevent it? (Simple prevention steps)
+
+Keep it SHORT.
+Keep it EASY.
+Do not use technical jargon.
+Format clearly.
+"""
+
+        model = genai.GenerativeModel(MODEL_NAME)
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": 10000
+            }
+        )
+
+        return response.text if response else "No response generated."
+    def generate_content(self, user_query):
+        model = genai.GenerativeModel(MODEL_NAME)
+
+        system_prompt = """
+You are a professional AI assistant inside a Network Anomaly Detection Dashboard.
+
+Your role:
+- Answer clearly and correctly.
+- If user asks about cyber attacks, explain in simple language.
+- If user asks technical questions, give structured and accurate answers.
+- If user question is unclear, politely ask for clarification.
+- Keep answers short and understandable.
+- Do NOT say you are an AI model.
+- Do NOT return empty responses.
+"""
+
+        full_prompt = f"{system_prompt}\n\nUser Query:\n{user_query}"
+
+        response = model.generate_content(
+            full_prompt,
+            generation_config={
+                "temperature": 0.5,
+                "max_output_tokens": 3000
+            }
+        )
+        return response
+
+gemini_service = GeminiAttackExplainer()
 
 # ==============================================================================
 # Step 1: Initialize Global Variables / Session State
@@ -187,49 +263,139 @@ def process_and_queue_packet(data_queue, stop_event):
 # ==============================================================================
 # Step 4: Enhanced Prediction Logic
 # ==============================================================================
+# def make_prediction(packet_buffer, log_entry, detection_mode):
+#     predicted_class_name = "Benign"
+#     confidence = 0.0
+    
+#     if detection_mode == "Benign Mode":
+#         predicted_class_name = "Benign"
+#         confidence = 0.99
+#         return predicted_class_name, confidence
+
+#     # Anomaly Detection Logic
+#     is_known_malicious = log_entry['source_ip'] in st.session_state.malicious_ips
+    
+#     if use_model and len(packet_buffer) == time_steps:
+#         df = pd.DataFrame(list(packet_buffer), columns=features)
+#         # scaled_features = scaler.transform(df)
+#         if use_model and hasattr(scaler, "feature_names_in_"):
+#             expected_features = list(scaler.feature_names_in_)
+#             for col in expected_features:
+#                 if col not in df.columns:
+#                     df[col] = 0
+#             df = df[expected_features]
+#         scaled_features = scaler.transform(df)
+#         df = df[expected_features]
+#         input_data = np.array(scaled_features).astype(np.float32).reshape(1, time_steps, -1)
+#         interpreter.set_tensor(input_details[0]['index'], input_data)
+#         interpreter.invoke()
+#         output_data = interpreter.get_tensor(output_details[0]['index'])
+#         predicted_class_index = int(np.argmax(output_data))
+#         confidence = float(np.max(output_data))
+#         if hasattr(encoder, "classes_"):
+#             num_classes = len(encoder.classes_)
+#             if predicted_class_index < num_classes:
+#                 predicted_class_name = encoder.inverse_transform([predicted_class_index])[0]
+#             else:
+#                 predicted_class_name = "Benign"
+#         else:
+#             predicted_class_name = "Benign"
+#         predicted_class_name = encoder.inverse_transform([predicted_class_index])[0]
+#         confidence = np.max(output_data)
+#     else:
+#         packet_type = log_entry.get('packet_type', 'normal')
+        
+#         if is_known_malicious:
+#             predicted_class_name = random.choices([t for t in attack_types if t != "Benign"], 
+#                                                 weights=[2, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1])[0]
+#             confidence = round(random.uniform(0.75, 0.95), 2)
+#         elif packet_type == "malicious":
+#             predicted_class_name = random.choices(attack_types, 
+#                                                 weights=[0.1] + [0.9/15]*15)[0]
+#             confidence = round(random.uniform(0.65, 0.90), 2)
+#         elif packet_type == "suspicious":
+#             predicted_class_name = random.choices(attack_types, 
+#                                                 weights=[0.4] + [0.6/15]*15)[0]
+#             confidence = round(random.uniform(0.55, 0.80), 2)
+#         else:
+#             predicted_class_name = random.choices(attack_types, 
+#                                                 weights=[0.7] + [0.3/15]*15)[0]
+#             confidence = round(random.uniform(0.50, 0.75), 2)
+    
+#     return predicted_class_name, confidence
+
 def make_prediction(packet_buffer, log_entry, detection_mode):
     predicted_class_name = "Benign"
     confidence = 0.0
-    
-    if detection_mode == "Benign Mode":
-        predicted_class_name = "Benign"
-        confidence = 0.99
-        return predicted_class_name, confidence
 
-    # Anomaly Detection Logic
+    if detection_mode == "Benign Mode":
+        return "Benign", 0.99
+
     is_known_malicious = log_entry['source_ip'] in st.session_state.malicious_ips
-    
+
     if use_model and len(packet_buffer) == time_steps:
-        df = pd.DataFrame(list(packet_buffer), columns=features)
-        scaled_features = scaler.transform(df)
-        input_data = np.array(scaled_features).astype(np.float32).reshape(1, time_steps, -1)
-        interpreter.set_tensor(input_details[0]['index'], input_data)
-        interpreter.invoke()
-        output_data = interpreter.get_tensor(output_details[0]['index'])
-        predicted_class_index = np.argmax(output_data)
-        predicted_class_name = encoder.inverse_transform([predicted_class_index])[0]
-        confidence = np.max(output_data)
+        try:
+            df = pd.DataFrame(list(packet_buffer), columns=features)
+
+            # ---------------- FIX 1: Feature Schema Alignment ----------------
+            if hasattr(scaler, "feature_names_in_"):
+                expected_features = list(scaler.feature_names_in_)
+
+                for col in expected_features:
+                    if col not in df.columns:
+                        df[col] = 0
+
+                df = df[expected_features]
+            # ------------------------------------------------------------------
+
+            scaled_features = scaler.transform(df)
+
+            input_data = np.array(scaled_features).astype(np.float32).reshape(1, time_steps, -1)
+
+            interpreter.set_tensor(input_details[0]['index'], input_data)
+            interpreter.invoke()
+
+            output_data = interpreter.get_tensor(output_details[0]['index'])
+            output_vector = output_data.flatten()
+
+            # ---------------- FIX 2: Safe Output Handling ----------------
+            predicted_class_index = int(np.argmax(output_vector))
+            confidence = float(np.max(output_vector))
+
+            if predicted_class_index < len(attack_types):
+                predicted_class_name = attack_types[predicted_class_index]
+            else:
+                predicted_class_name = "Benign"
+            # ------------------------------------------------------------------
+
+        except Exception as e:
+            print("Model prediction error:", e)
+            predicted_class_name = "Benign"
+            confidence = 0.0
+
     else:
+        # ---------------- Simulation Fallback Logic ----------------
         packet_type = log_entry.get('packet_type', 'normal')
-        
+
         if is_known_malicious:
-            predicted_class_name = random.choices([t for t in attack_types if t != "Benign"], 
-                                                weights=[2, 2, 1, 2, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1])[0]
+            predicted_class_name = random.choice([t for t in attack_types if t != "Benign"])
             confidence = round(random.uniform(0.75, 0.95), 2)
+
         elif packet_type == "malicious":
-            predicted_class_name = random.choices(attack_types, 
-                                                weights=[0.1] + [0.9/15]*15)[0]
+            predicted_class_name = random.choice(attack_types[1:])
             confidence = round(random.uniform(0.65, 0.90), 2)
+
         elif packet_type == "suspicious":
-            predicted_class_name = random.choices(attack_types, 
-                                                weights=[0.4] + [0.6/15]*15)[0]
+            predicted_class_name = random.choice(attack_types)
             confidence = round(random.uniform(0.55, 0.80), 2)
+
         else:
-            predicted_class_name = random.choices(attack_types, 
-                                                weights=[0.7] + [0.3/15]*15)[0]
+            predicted_class_name = random.choice(attack_types)
             confidence = round(random.uniform(0.50, 0.75), 2)
-    
+        # ------------------------------------------------------------
+
     return predicted_class_name, confidence
+
 
 # ==============================================================================
 # Step 5: Streamlit UI Layout & Main Thread Logic
@@ -455,32 +621,24 @@ if st.session_state.packets_data:
 
     # ================= Attack Details Tab =================
     with tabs[2]:
-        st.header("📚 Attack Details and Prevention")
-        attack_info = {
-            "Benign": {"description":"Normal, legitimate network traffic","cause":"Standard user activities and system operations","prevention":"None required - this is normal traffic"},
-            "DoS": {"description":"Denial of Service - floods a network with malicious packets, overwhelming the system.","cause":"Excessive service requests from a single source to consume resources.","prevention":"Rate limiting, firewalls, load balancers, and IDS monitoring."},
-            "DDoS": {"description":"Distributed Denial of Service - coordinated attack from multiple sources.","cause":"Botnet-controlled devices attacking simultaneously.","prevention":"Content Delivery Networks (CDNs), traffic filtering, and DDoS protection services."},
-            "Spoofing": {"description":"An attacker impersonates a trusted entity by forging network identifiers.","cause":"Modified packet headers, fake source IPs, or MAC address manipulation.","prevention":"Ingress/egress filtering, strong authentication protocols, and network access control."},
-            "MITM": {"description":"Man-in-the-Middle - attacker secretly intercepts and relays communication.","cause":"Weak encryption, compromised network infrastructure, or ARP poisoning.","prevention":"End-to-end encryption (TLS/SSL), VPNs, certificate pinning, and secure key exchange."},
-            "Brute Force": {"description":"Systematic attempts to guess passwords, keys, or access credentials.","cause":"Weak authentication mechanisms and easily guessable passwords.","prevention":"Multi-Factor Authentication (MFA), account lockout policies, CAPTCHAs, and strong password requirements."},
-            "SQL Injection": {"description":"Malicious SQL code injection to manipulate database queries.","cause":"Improper input validation and lack of parameterized queries in web applications.","prevention":"Prepared statements, input sanitization, least privilege database accounts, and code reviews."},
-            "XSS": {"description":"Cross-Site Scripting - injecting malicious scripts into web pages.","cause":"Improper input validation allowing script execution in browsers.","prevention":"Input validation, output encoding, Content Security Policy (CSP), and secure coding practices."},
-            "Phishing": {"description":"Social engineering to steal sensitive information through deception.","cause":"Fraudulent emails, websites, or messages mimicking legitimate entities.","prevention":"User awareness training, email filtering, multi-factor authentication, and security awareness."},
-            "Ransomware": {"description":"Malicious software that encrypts files and demands ransom payment.","cause":"Malware infection through email attachments, downloads, or system vulnerabilities.","prevention":"Regular backups, endpoint protection, patch management, and user education."},
-            "Botnet": {"description":"Network of compromised devices under remote attacker control.","cause":"Malware infection allowing unauthorized remote access and control.","prevention":"Antivirus software, firewalls, network monitoring, and regular system updates."},
-            "Worm": {"description":"Self-replicating malware that spreads across networks automatically.","cause":"Exploitation of unpatched software vulnerabilities for autonomous spreading.","prevention":"Regular security updates, network segmentation, Intrusion Detection Systems, and endpoint protection."},
-            "Trojan": {"description":"Malicious software disguised as legitimate applications.","cause":"Users unknowingly installing malware disguised as useful software.","prevention":"Antivirus software, application whitelisting, downloading from trusted sources only."},
-            "Port Scanning": {"description":"Network reconnaissance to identify open ports and potential vulnerabilities.","cause":"Automated tools probing network services for security assessment or attack preparation.","prevention":"Firewall configuration, intrusion detection, port knocking, and network segmentation."},
-            "ARP Spoofing": {"description":"Address Resolution Protocol manipulation to intercept network traffic.","cause":"Sending false ARP messages to associate attacker's MAC with victim's IP address.","prevention":"Static ARP entries, dynamic ARP inspection, network monitoring, and switch security features."},
-            "DNS Spoofing": {"description":"Domain Name System manipulation to redirect traffic to malicious servers.","cause":"DNS cache poisoning or compromised DNS servers providing false resolution.","prevention":"DNSSEC implementation, secure DNS resolvers, DNS over HTTPS/TLS, and network monitoring."}
-        }
-        
-        selected_attack = st.selectbox("🔍 Select Attack Type for Details", list(attack_info.keys()))
-        info = attack_info.get(selected_attack)
-        if info:
-            st.markdown(f"**📝 Description:** {info['description']}")
-            st.markdown(f"**🔍 Root Cause:** {info['cause']}")
-            st.markdown(f"**🛡️ Prevention Methods:** {info['prevention']}")
+        st.header("📚 AI-Based Attack Remediation")
+        if st.session_state.packets_data:
+            df = pd.DataFrame(st.session_state.packets_data)
+            detected_attacks = df[df['prediction'] != "Benign"]['prediction'].unique().tolist()
+            if detected_attacks:
+                st.subheader("🚨 Detected Attacks")
+                st.write(", ".join(detected_attacks))
+                if st.button("🤖 Explain All Detected Attacks (Simple)"):
+                    with st.spinner("Generating simple explanations..."):
+                        explanation = gemini_service.generate_simple_explanation(detected_attacks)
+                        st.success("✅ Explanation Generated")
+                        st.markdown(explanation)
+            else:
+                st.info("No malicious attacks detected yet.")
+        else:
+            st.info("Start the simulation to detect attacks.")
+
+
 
     # ================= Severity & IP Heatmap Tab =================
     with tabs[3]:
@@ -570,6 +728,252 @@ if st.session_state.packets_data:
             st.info("No threat sources identified yet.")
 else:
     st.info("👆 Start the selected mode to begin collecting and analyzing network traffic data.")
+
+# ================= CLEAN FLOATING RIGHT CHATBOT ================= #
+
+# ================= CLEAN FLOATING RIGHT CHATBOT ================= #
+
+if "floating_chat_history" not in st.session_state:
+    st.session_state.floating_chat_history = []
+if "chat_open" not in st.session_state:
+    st.session_state.chat_open = False
+
+def send_floating_message():
+    if st.session_state.floating_input.strip() != "":
+        query = st.session_state.floating_input
+        reply = gemini_service.generate_content(query)
+
+        st.session_state.floating_chat_history.append(("You", query))
+        st.session_state.floating_chat_history.append(("Bot", reply.text if hasattr(reply, 'text') else str(reply)))
+        st.session_state.floating_input = ""
+
+# Build chat history HTML
+chat_html = ""
+for sender, message in st.session_state.floating_chat_history:
+    if sender == "You":
+        chat_html += f"<div class='user-msg'>🧑 <strong>You:</strong> {message}</div>"
+    else:
+        chat_html += f"<div class='bot-msg'>🤖 <strong>Assistant:</strong> {message}</div>"
+
+# Chat display state - initially hidden
+chat_display = "flex" if st.session_state.chat_open else "none"
+
+# Inject FULL floating UI with toggle functionality
+st.markdown(f"""
+<style>
+#chat-toggle {{
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 65px;
+    height: 65px;
+    background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+    border-radius: 50%;
+    text-align: center;
+    font-size: 28px;
+    color: white;
+    line-height: 65px;
+    cursor: pointer;
+    z-index: 9999;
+    box-shadow: 0px 4px 16px rgba(0,0,0,0.4);
+    transition: all 0.3s ease;
+}}
+
+#chat-toggle:hover {{
+    transform: scale(1.1);
+    box-shadow: 0px 6px 20px rgba(0,0,0,0.5);
+}}
+
+#chat-container {{
+    display: {chat_display};
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    width: 420px;
+    height: 580px;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0px 8px 30px rgba(0,0,0,0.35);
+    z-index: 9998;
+    overflow: hidden;
+    flex-direction: column;
+    animation: slideIn 0.3s ease-out;
+}}
+
+@keyframes slideIn {{
+    from {{
+        transform: translateY(100%);
+        opacity: 0;
+    }}
+    to {{
+        transform: translateY(0);
+        opacity: 1;
+    }}
+}}
+
+#chat-header {{
+    background: linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+    color: white;
+    padding: 18px 20px;
+    font-weight: bold;
+    font-size: 16px;
+    border-radius: 20px 20px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}}
+
+#chat-close {{
+    cursor: pointer;
+    font-size: 24px;
+    font-weight: bold;
+    color: white;
+    background: rgba(255,255,255,0.2);
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}}
+
+#chat-close:hover {{
+    background: rgba(255,255,255,0.3);
+    transform: rotate(90deg);
+}}
+
+#chat-messages {{
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: #f8fafc;
+}}
+
+#chat-input-area {{
+    padding: 15px 20px;
+    background: white;
+    border-top: 1px solid #e2e8f0;
+    border-radius: 0 0 20px 20px;
+}}
+
+.user-msg {{
+    background: linear-gradient(135deg, #bae6fd 0%, #7dd3fc 100%);
+    padding: 12px 15px;
+    border-radius: 15px 15px 5px 15px;
+    margin-bottom: 12px;
+    max-width: 85%;
+    margin-left: auto;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    word-wrap: break-word;
+}}
+
+.bot-msg {{
+    background: white;
+    padding: 12px 15px;
+    border-radius: 15px 15px 15px 5px;
+    margin-bottom: 12px;
+    max-width: 85%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    border-left: 3px solid #38bdf8;
+    word-wrap: break-word;
+}}
+
+.user-msg strong, .bot-msg strong {{
+    display: block;
+    margin-bottom: 5px;
+    font-size: 13px;
+    opacity: 0.8;
+}}
+
+#chat-messages::-webkit-scrollbar {{
+    width: 6px;
+}}
+
+#chat-messages::-webkit-scrollbar-track {{
+    background: #f1f1f1;
+}}
+
+#chat-messages::-webkit-scrollbar-thumb {{
+    background: #38bdf8;
+    border-radius: 3px;
+}}
+
+.chat-input-wrapper {{
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}}
+
+.chat-input-wrapper input {{
+    flex: 1;
+    padding: 10px 15px;
+    border: 2px solid #e2e8f0;
+    border-radius: 25px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.3s;
+}}
+
+.chat-input-wrapper input:focus {{
+    border-color: #38bdf8;
+}}
+</style>
+
+<div id="chat-toggle" onclick="toggleChatStreamlit()">💬</div>
+
+<div id="chat-container">
+    <div id="chat-header">
+        <span>🤖 Security Assistant</span>
+        <div id="chat-close" onclick="toggleChatStreamlit()">×</div>
+    </div>
+    <div id="chat-messages">
+        {chat_html if chat_html else "<div style='text-align:center; color:#64748b; margin-top:50px;'>👋 Hello! How can I help you today?</div>"}
+    </div>
+    <div id="chat-input-area">
+        <div class="chat-input-wrapper">
+            <input type="text" id="chat-input-box" placeholder="Type your message..." readonly />
+        </div>
+    </div>
+</div>
+
+<script>
+const stApp = window.parent.document;
+
+function toggleChatStreamlit() {{
+    // Find the hidden button in Streamlit
+    const buttons = stApp.querySelectorAll('button');
+    buttons.forEach(btn => {{
+        if (btn.textContent.includes('Toggle Chat')) {{
+            btn.click();
+        }}
+    }});
+}}
+</script>
+""", unsafe_allow_html=True)
+
+# Hidden button to toggle chat state
+if st.button("Toggle Chat", key="toggle_chat_btn", type="primary"):
+    st.session_state.chat_open = not st.session_state.chat_open
+    st.rerun()
+
+# Hide the toggle button with CSS
+st.markdown("""
+<style>
+button[kind="primary"] {
+    display: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Hidden Streamlit input for message handling
+st.text_input(
+    "Chat Input",
+    key="floating_input",
+    on_change=send_floating_message,
+    label_visibility="collapsed",
+    placeholder="This is hidden - use the chat window above"
+)
 
 # Footer
 st.markdown("---")
