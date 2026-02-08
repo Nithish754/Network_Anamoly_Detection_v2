@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -20,8 +21,14 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 # ==============================================================================
 # Gemini 2.0 Flash Setup (AI Remedy Generator)
 # ==============================================================================
+# for local comment this line below 
+API_KEY = os.getenv("GOOGLE_API_KEY") 
+# for local comment above line and use the below line uncommented 
+# API_KEY = "REAL_APKEY_VALUE"
 
-API_KEY = "AIzaSyBmH7gjL0brMI6V8OzxIJ3ljBLsbVprFHs"  # Rotate your exposed key immediately
+if not API_KEY:
+    st.error("GOOGLE_API_KEY not found")
+    st.stop()
 genai.configure(api_key=API_KEY)
 
 MODEL_NAME = "gemini-2.5-flash"
@@ -820,13 +827,14 @@ if st.session_state.defender_open:
 
     with send_col1:
         if st.button("Send"):
-            if user_input.strip():
-                st.session_state.defender_history.append(("You", user_input))
-                reply = gemini_service.generate_content(user_input)
-                st.session_state.defender_history.append(
-                    ("Defender X", reply.text if hasattr(reply,"text") else str(reply))
-                )
+            msg = st.session_state.get("defender_input", "").strip()
+            if msg:
+                st.session_state.defender_history.append(("You", msg))
+                reply = gemini_service.generate_content(msg)
+                st.session_state.defender_history.append(("Defender X", reply.text if hasattr(reply, "text") else str(reply)))
+                st.session_state.defender_input = ""  # clear input
                 st.rerun()
+
 
     # ---------- CLEAR CHAT BUTTON ----------
     with send_col2:
