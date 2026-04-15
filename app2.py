@@ -103,7 +103,7 @@ def send_defender_message():
         st.session_state.defender_history.append(
             ("Defender X", reply.text if hasattr(reply, "text") else str(reply))
         )
-        st.session_state.defender_input = ""
+        
 
 
 # ==============================================================================
@@ -825,15 +825,10 @@ if st.session_state.defender_open:
 
     send_col1, send_col2 = st.sidebar.columns([3,2])
 
-    with send_col1:
-        if st.button("Send"):
-            msg = st.session_state.get("defender_input", "").strip()
-            if msg:
-                st.session_state.defender_history.append(("You", msg))
-                reply = gemini_service.generate_content(msg)
-                st.session_state.defender_history.append(("Defender X", reply.text if hasattr(reply, "text") else str(reply)))
-                st.session_state.defender_input = ""  # clear input
-                st.rerun()
+with send_col1:
+    if st.button("Send"):
+        send_defender_message()
+        st.rerun()
 
 
     # ---------- CLEAR CHAT BUTTON ----------
